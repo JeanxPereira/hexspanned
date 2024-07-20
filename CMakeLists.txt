@@ -17,3 +17,6 @@ target_link_libraries(hexspanned PRIVATE imgui::imgui)
 
 find_package(glm CONFIG REQUIRED)
 target_link_libraries(hexspanned PRIVATE glm::glm)
+
+find_package(nlohmann_json CONFIG REQUIRED)
+target_link_libraries(hexspanned PRIVATE nlohmann_json::nlohmann_json)

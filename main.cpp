@@ -10,6 +10,9 @@
 #include <fstream>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 enum PolygonMode
 {
@@ -65,11 +68,6 @@ unsigned meshTypeGLConstants[] = {
     GL_LINE_STRIP,
     GL_LINE_LOOP,
     GL_POINTS
-};
-
-PFNGLENABLEPROC glEnableOrDisable[] = {
-    glDisable,
-    glEnable
 };
 
 struct VisParams
@@ -166,6 +164,19 @@ drawVisMenu(VisParams& visParams, int editAddress)
     return needsReupload;
 }
 
+void loadFile(const std::string& name, std::vector<uint8_t>& data, unsigned& vbo, VisParams& visParams)
+{
+    // Load file to byte buffer
+    std::ifstream in(name, std::ios::binary | std::ios::ate);
+    auto size = in.tellg();
+    data.resize(size);
+    in.seekg(0, std::ios::beg);
+    in.read((char *) data.data(), size);
+    in.close();
+
+    copyToGPU(vbo, data, visParams.bigEndian);
+}
+
 void render(const VisParams& visParams, unsigned int vao, unsigned int vbo, unsigned int program)
 {
     glBindVertexArray(vao);
@@ -177,7 +188,10 @@ void render(const VisParams& visParams, unsigned int vao, unsigned int vbo, unsi
 
     glUseProgram(program);
 
-    glEnableOrDisable[visParams.backfaceCulling](GL_CULL_FACE);
+    if (visParams.backfaceCulling) glEnable(GL_CULL_FACE);
+    else
+        glDisable(GL_CULL_FACE);
+
     glPolygonMode(GL_FRONT_AND_BACK, polygonModeGLConstants[visParams.polygonMode]);
 
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1280.0f / 720.0f, 0.1f, 1000.0f);
@@ -223,6 +237,15 @@ int main()
     std::vector<uint8_t> data;
     unsigned vao, vbo;
     VisParams visParams;
+    json prevFiles = json::array();
+
+    {
+        std::ifstream in(".hexspanned-history.json");
+        if (in.is_open()) {
+            in >> prevFiles;
+            in.close();
+        }
+    }
 
     glGenVertexArrays(1, &vao);
     glGenBuffers(1, &vbo);
@@ -269,6 +292,16 @@ int main()
             if (ImGui::MenuItem("Open", "Ctrl+O")) {
                 fileDialog.Open();
             }
+            if (ImGui::BeginMenu("Open Recent")) {
+                for (auto& recentFile: prevFiles) {
+                    auto path = std::filesystem::path(recentFile.get<std::string>());
+                    auto str_name = path.filename().string() + " (" + path.string() + ")";
+                    if (ImGui::MenuItem(str_name.c_str())) {
+                        loadFile(path, data, vbo, visParams);
+                    }
+                }
+                ImGui::EndMenu();
+            }
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -282,15 +315,17 @@ int main()
         fileDialog.Display();
 
         if (fileDialog.HasSelected()) {
-            // Load file to byte buffer
-            std::ifstream in(fileDialog.GetSelected(), std::ios::binary | std::ios::ate);
-            auto size = in.tellg();
-            data.resize(size);
-            in.seekg(0, std::ios::beg);
-            in.read((char *) data.data(), size);
-            in.close();
+            loadFile(fileDialog.GetSelected(), data, vbo, visParams);
 
-            copyToGPU(vbo, data, visParams.bigEndian);
+            auto absPath = std::filesystem::absolute(fileDialog.GetSelected()).string();
+            if (std::find(prevFiles.begin(), prevFiles.end(), absPath) == prevFiles.end()) {
+                prevFiles.push_back(absPath);
+                std::ofstream out(".hexspanned-history.json");
+                if (out.is_open()) {
+                    out << prevFiles;
+                    out.close();
+                }
+            }
             fileDialog.Close();
         }
 
