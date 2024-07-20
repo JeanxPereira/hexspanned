@@ -5,6 +5,8 @@ Adjust the starting point, stride, endianness, and more and search around to fin
 
 This may be useful for validating your assumptions when reverse-engineering a binary model format.
 
+<img src="screenshot.png" width="500" alt="A screenshot of hexspanned in action"/>
+
 ## License
 
 This project is licensed under the MIT license.
