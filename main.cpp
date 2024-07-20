@@ -79,8 +79,6 @@ struct VisParams
     int vertexCount = 3;
     int vertexStride = 12;
     bool bigEndian = true;
-    bool wireframe = false;
-    bool points = false;
     bool backfaceCulling = false;
     float viewDistance = 3.0f;
     bool indexedDraw = false;
@@ -92,20 +90,20 @@ struct VisParams
 void copyToGPU(unsigned vbo, std::vector<uint8_t>& data, bool& bigEndian)
 {
     // TODO: Endian swap should take into account offset, probably requiring a re-upload with each address change
-    std::vector<uint8_t> endian_swapped;
+    std::vector<uint8_t> endianSwappedData;
     std::vector<uint8_t> *pData = &data;
 
     if (bigEndian) {
-        endian_swapped.resize(data.size());
+        endianSwappedData.resize(data.size());
 
         for (int i = 0; i < data.size(); i += 4) {
-            endian_swapped[i] = data[i + 3];
-            endian_swapped[i + 1] = data[i + 2];
-            endian_swapped[i + 2] = data[i + 1];
-            endian_swapped[i + 3] = data[i];
+            endianSwappedData[i] = data[i + 3];
+            endianSwappedData[i + 1] = data[i + 2];
+            endianSwappedData[i + 2] = data[i + 1];
+            endianSwappedData[i + 3] = data[i];
         }
 
-        pData = &endian_swapped;
+        pData = &endianSwappedData;
     }
 
     // Update buffer bindings
