@@ -1,0 +1,19 @@
+{
+  "name" : "hexspanned",
+  "version-string" : "1.0.0",
+  "builtin-baseline" : "ded9717095600a356b624cab03326e44764afed4",
+  "dependencies" : [ {
+    "name" : "glfw3",
+    "version>=" : "3.4"
+  }, {
+    "name" : "glad",
+    "version>=" : "0.1.36"
+  }, {
+    "name" : "imgui",
+    "version>=" : "1.90.7",
+    "features" : [ "glfw-binding", "opengl3-binding" ]
+  }, {
+    "name" : "glm",
+    "version>=" : "1.0.1#2"
+  } ]
+}
