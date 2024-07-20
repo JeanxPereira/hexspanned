@@ -24,18 +24,52 @@ const char *polygonModes[] = {
     "Points"
 };
 
+unsigned polygonModeGLConstants[] = {
+    GL_FILL,
+    GL_LINE,
+    GL_POINT
+};
 
 enum MeshType
 {
     MTTriangle,
     MTTriangleStrip,
-    MTTriangleFan
+    MTTriangleFan,
+    MTQuad,
+    MTQuadStrip,
+    MTLine,
+    MTLineStrip,
+    MTLineLoop,
+    MTPoint
 };
 
 const char *meshTypes[] = {
     "Triangle",
     "Triangle Strip",
-    "Triangle Fan"
+    "Triangle Fan",
+    "Quad",
+    "Quad Strip",
+    "Line",
+    "Line Strip",
+    "Line Loop",
+    "Point"
+};
+
+unsigned meshTypeGLConstants[] = {
+    GL_TRIANGLES,
+    GL_TRIANGLE_STRIP,
+    GL_TRIANGLE_FAN,
+    GL_QUADS,
+    GL_QUAD_STRIP,
+    GL_LINES,
+    GL_LINE_STRIP,
+    GL_LINE_LOOP,
+    GL_POINTS
+};
+
+PFNGLENABLEPROC glEnableOrDisable[] = {
+    glDisable,
+    glEnable
 };
 
 struct VisParams
@@ -57,10 +91,10 @@ struct VisParams
 
 void copyToGPU(unsigned vbo, std::vector<uint8_t>& data, bool& bigEndian)
 {
-
     // TODO: Endian swap should take into account offset, probably requiring a re-upload with each address change
     std::vector<uint8_t> endian_swapped;
     std::vector<uint8_t> *pData = &data;
+
     if (bigEndian) {
         endian_swapped.resize(data.size());
 
@@ -80,7 +114,7 @@ void copyToGPU(unsigned vbo, std::vector<uint8_t>& data, bool& bigEndian)
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-unsigned compile_shader(const char *source, unsigned type)
+unsigned compileShader(const char *source, unsigned type)
 {
     unsigned shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, nullptr);
@@ -108,7 +142,7 @@ drawVisMenu(VisParams& visParams, int editAddress)
 
     if (visParams.indexedDraw) {
         ImGui::InputInt("Index Start", &visParams.indexBufferStart, 1, 100, ImGuiInputTextFlags_CharsHexadecimal);
-        if (ImGui::Button("Set to Highlighted Address#STHA_IND")) {
+        if (ImGui::Button("Set to Highlighted Address##STHA_IND")) {
             visParams.indexBufferStart = editAddress;
         }
     }
@@ -125,30 +159,46 @@ drawVisMenu(VisParams& visParams, int editAddress)
         needsReupload = true;
     }
 
-    if (ImGui::Combo("Polygon Mode", (int *) &visParams.polygonMode, polygonModes, 3)) {
-        switch (visParams.polygonMode) {
-        case PMFill: glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-            break;
-        case PMPoint: glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
-            break;
-        case PMLine:
-        default: glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            break;
-        }
-    }
-
-    ImGui::Combo("Mesh Type", (int *) &visParams.meshType, meshTypes, 3);
-
-    if (ImGui::Checkbox("Backface Culling", &visParams.backfaceCulling)) {
-        if (visParams.backfaceCulling)
-            glEnable(GL_CULL_FACE);
-        else
-            glDisable(GL_CULL_FACE);
-    }
+    ImGui::Combo("Polygon Mode", (int *) &visParams.polygonMode, polygonModes, sizeof(polygonModes) / sizeof(char *));
+    ImGui::Combo("Mesh Type", (int *) &visParams.meshType, meshTypes, sizeof(meshTypes) / sizeof(char *));
+    ImGui::Checkbox("Backface Culling", &visParams.backfaceCulling);
     ImGui::InputFloat("View Distance", &visParams.viewDistance);
     ImGui::End();
 
     return needsReupload;
+}
+
+void render(const VisParams& visParams, unsigned int vao, unsigned int vbo, unsigned int program)
+{
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, visParams.vertexStride,
+                          (void *) (uintptr_t) visParams.vertexBufferStart);
+    glEnableVertexAttribArray(0);
+
+    glUseProgram(program);
+
+    glEnableOrDisable[visParams.backfaceCulling](GL_CULL_FACE);
+    glPolygonMode(GL_FRONT_AND_BACK, polygonModeGLConstants[visParams.polygonMode]);
+
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1280.0f / 720.0f, 0.1f, 1000.0f);
+    glm::mat4 view = glm::lookAt(glm::vec3(1, 1, 1) * visParams.viewDistance, glm::vec3(0, 0, 0),
+                                 glm::vec3(0, 1, 0));
+    auto model = glm::identity<glm::mat4>();
+    glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+
+    unsigned mode = meshTypeGLConstants[visParams.meshType];
+
+    if (visParams.indexedDraw) {
+        glDrawElements(mode, visParams.vertexCount,
+                       visParams.halfWidthIndexes ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT,
+                       ((void *) (uintptr_t) visParams.indexBufferStart));
+    } else {
+        glDrawArrays(mode, 0, visParams.vertexCount);
+    }
 }
 
 int main()
@@ -181,12 +231,25 @@ int main()
     glEnable(GL_DEPTH_TEST);
     glPointSize(4.0f);
 
-    unsigned vertex_shader = compile_shader(
-        "#version 330 core\nlayout (location = 0) in vec3 pos; uniform mat4 projection; uniform mat4 view; uniform mat4 model; void main() { gl_Position = projection * view * model * vec4(pos, 1.0); }",
+    unsigned vertex_shader = compileShader(
+        "#version 330 core\n"
+        "layout (location = 0) in vec3 pos;"
+        "uniform mat4 projection;"
+        "uniform mat4 view;"
+        "uniform mat4 model;"
+        "void main() {"
+        "   gl_Position = projection * view * model * vec4(pos, 1.0);"
+        "}",
         GL_VERTEX_SHADER);
-    unsigned fragment_shader = compile_shader(
-        "#version 330 core\nout vec4 color; void main() { color = vec4(1, 0, 0, 1); }",
+
+    unsigned fragment_shader = compileShader(
+        "#version 330 core\n"
+        "out vec4 color;"
+        "void main() {"
+        "   color = vec4(1, 0, 0, 1);"
+        "}",
         GL_FRAGMENT_SHADER);
+
     unsigned program = glCreateProgram();
     glAttachShader(program, vertex_shader);
     glAttachShader(program, fragment_shader);
@@ -235,43 +298,13 @@ int main()
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glBindVertexArray(vao);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, visParams.vertexStride,
-                              (void *) (uintptr_t) visParams.vertexBufferStart);
-        glEnableVertexAttribArray(0);
+        bool canRenderRegular =
+            visParams.vertexStride * visParams.vertexCount + visParams.vertexBufferStart < data.size();
+        bool canRenderIndexed = visParams.vertexCount * 4 + visParams.indexBufferStart < data.size();
+        bool canRender = visParams.indexedDraw ? canRenderIndexed : canRenderRegular;
 
-        glUseProgram(program);
-
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1280.0f / 720.0f, 0.1f, 1000.0f);
-        glm::mat4 view = glm::lookAt(glm::vec3(1, 1, 1) * visParams.viewDistance, glm::vec3(0, 0, 0),
-                                     glm::vec3(0, 1, 0));
-        auto model = glm::identity<glm::mat4>();
-        glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-        glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(glGetUniformLocation(program, "model"), 1, GL_FALSE, glm::value_ptr(model));
-
-        if ((visParams.indexedDraw && visParams.vertexCount * 4 + visParams.indexBufferStart < data.size()) ||
-            (!visParams.indexedDraw &&
-             visParams.vertexStride * visParams.vertexCount + visParams.vertexBufferStart < data.size())) {
-
-            unsigned mode = GL_TRIANGLES;
-            switch (visParams.meshType) {
-            case MTTriangleFan:mode = GL_TRIANGLE_FAN;
-                break;
-            case MTTriangleStrip:mode = GL_TRIANGLE_STRIP;
-            case MTTriangle:
-            default: break;
-            }
-
-            if (visParams.indexedDraw) {
-                glDrawElements(mode, visParams.vertexCount,
-                               visParams.halfWidthIndexes ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT,
-                               ((void *) (uintptr_t) visParams.indexBufferStart));
-            } else {
-                glDrawArrays(mode, 0, visParams.vertexCount);
-            }
+        if (canRender) {
+            render(visParams, vao, vbo, program);
         } else {
             ImGui::Begin("Oops!", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
             ImGui::Text("The current render parameters would read past the end of the file!");
