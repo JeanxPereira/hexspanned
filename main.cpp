@@ -11,6 +11,33 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+enum PolygonMode
+{
+    PMFill,
+    PMLine,
+    PMPoint
+};
+
+const char *polygonModes[] = {
+    "Fill",
+    "Wireframe",
+    "Points"
+};
+
+
+enum MeshType
+{
+    MTTriangle,
+    MTTriangleStrip,
+    MTTriangleFan
+};
+
+const char *meshTypes[] = {
+    "Triangle",
+    "Triangle Strip",
+    "Triangle Fan"
+};
+
 struct VisParams
 {
     int vertexBufferStart = 0;
@@ -19,10 +46,13 @@ struct VisParams
     int vertexStride = 12;
     bool bigEndian = true;
     bool wireframe = false;
+    bool points = false;
     bool backfaceCulling = false;
     float viewDistance = 3.0f;
     bool indexedDraw = false;
     bool halfWidthIndexes = false;
+    PolygonMode polygonMode = PMFill;
+    MeshType meshType = MTTriangle;
 };
 
 void copyToGPU(unsigned vbo, std::vector<uint8_t>& data, bool& bigEndian)
@@ -75,7 +105,7 @@ drawVisMenu(VisParams& visParams, int editAddress)
     if (ImGui::Button("Set to Highlighted Address")) {
         visParams.vertexBufferStart = editAddress;
     }
-    
+
     if (visParams.indexedDraw) {
         ImGui::InputInt("Index Start", &visParams.indexBufferStart, 1, 100, ImGuiInputTextFlags_CharsHexadecimal);
         if (ImGui::Button("Set to Highlighted Address#STHA_IND")) {
@@ -95,9 +125,19 @@ drawVisMenu(VisParams& visParams, int editAddress)
         needsReupload = true;
     }
 
-    if (ImGui::Checkbox("Wireframe", &visParams.wireframe)) {
-        glPolygonMode(GL_FRONT_AND_BACK, visParams.wireframe ? GL_LINE : GL_FILL);
+    if (ImGui::Combo("Polygon Mode", (int *) &visParams.polygonMode, polygonModes, 3)) {
+        switch (visParams.polygonMode) {
+        case PMFill: glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            break;
+        case PMPoint: glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
+            break;
+        case PMLine:
+        default: glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            break;
+        }
     }
+
+    ImGui::Combo("Mesh Type", (int *) &visParams.meshType, meshTypes, 3);
 
     if (ImGui::Checkbox("Backface Culling", &visParams.backfaceCulling)) {
         if (visParams.backfaceCulling)
@@ -139,6 +179,7 @@ int main()
     glGenVertexArrays(1, &vao);
     glGenBuffers(1, &vbo);
     glEnable(GL_DEPTH_TEST);
+    glPointSize(4.0f);
 
     unsigned vertex_shader = compile_shader(
         "#version 330 core\nlayout (location = 0) in vec3 pos; uniform mat4 projection; uniform mat4 view; uniform mat4 model; void main() { gl_Position = projection * view * model * vec4(pos, 1.0); }",
@@ -214,12 +255,22 @@ int main()
         if ((visParams.indexedDraw && visParams.vertexCount * 4 + visParams.indexBufferStart < data.size()) ||
             (!visParams.indexedDraw &&
              visParams.vertexStride * visParams.vertexCount + visParams.vertexBufferStart < data.size())) {
+
+            unsigned mode = GL_TRIANGLES;
+            switch (visParams.meshType) {
+            case MTTriangleFan:mode = GL_TRIANGLE_FAN;
+                break;
+            case MTTriangleStrip:mode = GL_TRIANGLE_STRIP;
+            case MTTriangle:
+            default: break;
+            }
+
             if (visParams.indexedDraw) {
-                glDrawElements(GL_TRIANGLES, visParams.vertexCount,
+                glDrawElements(mode, visParams.vertexCount,
                                visParams.halfWidthIndexes ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT,
                                ((void *) (uintptr_t) visParams.indexBufferStart));
             } else {
-                glDrawArrays(GL_TRIANGLES, 0, visParams.vertexCount);
+                glDrawArrays(mode, 0, visParams.vertexCount);
             }
         } else {
             ImGui::Begin("Oops!", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
