@@ -1,5 +1,9 @@
+// Patched for hexspanned! Don't update it!
+// Patched to make the editor read-only while still allowing highlighting a position.
+
 // Mini memory editor for Dear ImGui (to embed in your game/tools)
 // Get latest version at http://www.github.com/ocornut/imgui_club
+
 // Licensed under The MIT License (MIT)
 
 // Right-click anywhere to access the Options menu!
@@ -131,12 +135,12 @@ struct MemoryEditor
 
         // State/Internals
         ContentsWidthChanged = false;
-        DataPreviewAddr = DataEditingAddr = (size_t) - 1;
+        DataPreviewAddr = DataEditingAddr = (size_t) -1;
         DataEditingTakeFocus = false;
         memset(DataInputBuf, 0, sizeof(DataInputBuf));
         memset(AddrInputBuf, 0, sizeof(AddrInputBuf));
-        GotoAddr = (size_t) - 1;
-        HighlightMin = HighlightMax = (size_t) - 1;
+        GotoAddr = (size_t) -1;
+        HighlightMin = HighlightMax = (size_t) -1;
         PreviewEndianness = 0;
         PreviewDataType = ImGuiDataType_S32;
     }
@@ -251,16 +255,16 @@ struct MemoryEditor
         bool data_next = false;
 
         if (ReadOnly || DataEditingAddr >= mem_size) {
-            DataEditingAddr = (size_t) - 1;
+            DataEditingAddr = (size_t) -1;
         }
         if (DataPreviewAddr >= mem_size) {
-            DataPreviewAddr = (size_t) - 1;
+            DataPreviewAddr = (size_t) -1;
         }
 
         size_t preview_data_type_size = OptShowDataPreview ? DataTypeGetSize(PreviewDataType) : 0;
 
-        size_t data_editing_addr_next = (size_t) - 1;
-        if (DataEditingAddr != (size_t) - 1) {
+        size_t data_editing_addr_next = (size_t) -1;
+        if (DataEditingAddr != (size_t) -1) {
             // Move cursor but only apply on next frame so scrolling with be synchronized (because currently we can't change the scrolling while the window is being rendered)
             if (ImGui::IsKeyPressed(ImGuiKey_UpArrow) &&
                 (ptrdiff_t) DataEditingAddr >= (ptrdiff_t) Cols) { data_editing_addr_next = DataEditingAddr - Cols; }
@@ -294,7 +298,7 @@ struct MemoryEditor
         while (clipper.Step()) {
             for (int line_i = clipper.DisplayStart; line_i < clipper.DisplayEnd; line_i++) // display only visible lines
             {
-                size_t addr = (size_t)(line_i * Cols);
+                size_t addr = (size_t) (line_i * Cols);
                 ImGui::Text(format_address, s.AddrDigitsCount, base_display_addr + addr);
 
                 // Draw Hexadecimal
@@ -310,11 +314,13 @@ struct MemoryEditor
                     bool is_highlight_from_user_func = (HighlightFn && HighlightFn(mem_data, addr));
                     bool is_highlight_from_preview = (addr >= DataPreviewAddr &&
                                                       addr < DataPreviewAddr + preview_data_type_size);
-                    if (is_highlight_from_user_range || is_highlight_from_user_func || is_highlight_from_preview) {
+                    bool is_highlight_from_editing = DataEditingAddr == addr;
+                    if (is_highlight_from_user_range || is_highlight_from_user_func || is_highlight_from_preview ||
+                        is_highlight_from_editing) {
                         ImVec2 pos = ImGui::GetCursorScreenPos();
                         float highlight_width = s.GlyphWidth * 2;
                         bool is_next_byte_highlighted = (addr + 1 < mem_size) &&
-                                                        ((HighlightMax != (size_t) - 1 && addr + 1 < HighlightMax) ||
+                                                        ((HighlightMax != (size_t) -1 && addr + 1 < HighlightMax) ||
                                                          (HighlightFn && HighlightFn(mem_data, addr + 1)));
                         if (is_next_byte_highlighted || (n + 1 == Cols)) {
                             highlight_width = s.HexCellWidth;
@@ -326,96 +332,29 @@ struct MemoryEditor
                                                  HighlightColor);
                     }
 
-                    if (DataEditingAddr == addr) {
-                        // Display text input on current byte
-                        bool data_write = false;
-                        ImGui::PushID((void *) addr);
-                        if (DataEditingTakeFocus) {
-                            ImGui::SetKeyboardFocusHere(0);
-                            ImSnprintf(AddrInputBuf, 32, format_data, s.AddrDigitsCount, base_display_addr + addr);
-                            ImSnprintf(DataInputBuf, 32, format_byte, ReadFn ? ReadFn(mem_data, addr) : mem_data[addr]);
-                        }
-                        struct UserData
-                        {
-                            // FIXME: We should have a way to retrieve the text edit cursor position more easily in the API, this is rather tedious. This is such a ugly mess we may be better off not using InputText() at all here.
-                            static int Callback(ImGuiInputTextCallbackData *data)
-                            {
-                                UserData *user_data = (UserData *) data->UserData;
-                                if (!data->HasSelection()) {
-                                    user_data->CursorPos = data->CursorPos;
-                                }
-                                if (data->SelectionStart == 0 && data->SelectionEnd == data->BufTextLen) {
-                                    // When not editing a byte, always refresh its InputText content pulled from underlying memory data
-                                    // (this is a bit tricky, since InputText technically "owns" the master copy of the buffer we edit it in there)
-                                    data->DeleteChars(0, data->BufTextLen);
-                                    data->InsertChars(0, user_data->CurrentBufOverwrite);
-                                    data->SelectionStart = 0;
-                                    data->SelectionEnd = 2;
-                                    data->CursorPos = 0;
-                                }
-                                return 0;
-                            }
+                    // NB: The trailing space is not visible but ensure there's no gap that the mouse cannot click on.
+                    ImU8 b = ReadFn ? ReadFn(mem_data, addr) : mem_data[addr];
 
-                            char CurrentBufOverwrite[3];  // Input
-                            int CursorPos;               // Output
-                        };
-                        UserData user_data;
-                        user_data.CursorPos = -1;
-                        ImSnprintf(user_data.CurrentBufOverwrite, 3, format_byte,
-                                   ReadFn ? ReadFn(mem_data, addr) : mem_data[addr]);
-                        ImGuiInputTextFlags flags =
-                            ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_EnterReturnsTrue |
-                            ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_NoHorizontalScroll |
-                            ImGuiInputTextFlags_CallbackAlways;
-                        flags |= ImGuiInputTextFlags_AlwaysOverwrite; // was ImGuiInputTextFlags_AlwaysInsertMode
-                        ImGui::SetNextItemWidth(s.GlyphWidth * 2);
-                        if (ImGui::InputText("##data", DataInputBuf, IM_ARRAYSIZE(DataInputBuf), flags,
-                                             UserData::Callback, &user_data)) {
-                            data_write = data_next = true;
-                        } else if (!DataEditingTakeFocus && !ImGui::IsItemActive()) {
-                            DataEditingAddr = data_editing_addr_next = (size_t) - 1;
-                        }
-                        DataEditingTakeFocus = false;
-                        if (user_data.CursorPos >= 2) {
-                            data_write = data_next = true;
-                        }
-                        if (data_editing_addr_next != (size_t) - 1) {
-                            data_write = data_next = false;
-                        }
-                        unsigned int data_input_value = 0;
-                        if (data_write && sscanf(DataInputBuf, "%X", &data_input_value) == 1) {
-                            if (WriteFn) {
-                                WriteFn(mem_data, addr, (ImU8) data_input_value);
-                            } else {
-                                mem_data[addr] = (ImU8) data_input_value;
-                            }
-                        }
-                        ImGui::PopID();
-                    } else {
-                        // NB: The trailing space is not visible but ensure there's no gap that the mouse cannot click on.
-                        ImU8 b = ReadFn ? ReadFn(mem_data, addr) : mem_data[addr];
-
-                        if (OptShowHexII) {
-                            if ((b >= 32 && b < 128)) {
-                                ImGui::Text(".%c ", b);
-                            } else if (b == 0xFF && OptGreyOutZeroes) {
-                                ImGui::TextDisabled("## ");
-                            } else if (b == 0x00) {
-                                ImGui::Text("   ");
-                            } else {
-                                ImGui::Text(format_byte_space, b);
-                            }
+                    if (OptShowHexII) {
+                        if ((b >= 32 && b < 128)) {
+                            ImGui::Text(".%c ", b);
+                        } else if (b == 0xFF && OptGreyOutZeroes) {
+                            ImGui::TextDisabled("## ");
+                        } else if (b == 0x00) {
+                            ImGui::Text("   ");
                         } else {
-                            if (b == 0 && OptGreyOutZeroes) {
-                                ImGui::TextDisabled("00 ");
-                            } else {
-                                ImGui::Text(format_byte_space, b);
-                            }
+                            ImGui::Text(format_byte_space, b);
                         }
-                        if (!ReadOnly && ImGui::IsItemHovered() && ImGui::IsMouseClicked(0)) {
-                            DataEditingTakeFocus = true;
-                            data_editing_addr_next = addr;
+                    } else {
+                        if (b == 0 && OptGreyOutZeroes) {
+                            ImGui::TextDisabled("00 ");
+                        } else {
+                            ImGui::Text(format_byte_space, b);
                         }
+                    }
+                    if (!ReadOnly && ImGui::IsItemHovered() && ImGui::IsMouseClicked(0)) {
+                        DataEditingTakeFocus = true;
+                        data_editing_addr_next = addr;
                     }
                 }
 
@@ -427,7 +366,7 @@ struct MemoryEditor
                     ImGui::PushID(line_i);
                     if (ImGui::InvisibleButton("ascii", ImVec2(s.PosAsciiEnd - s.PosAsciiStart, s.LineHeight))) {
                         DataEditingAddr = DataPreviewAddr =
-                            addr + (size_t)((ImGui::GetIO().MousePos.x - pos.x) / s.GlyphWidth);
+                            addr + (size_t) ((ImGui::GetIO().MousePos.x - pos.x) / s.GlyphWidth);
                         DataEditingTakeFocus = true;
                     }
                     ImGui::PopID();
@@ -458,7 +397,7 @@ struct MemoryEditor
         if (data_next && DataEditingAddr + 1 < mem_size) {
             DataEditingAddr = DataPreviewAddr = DataEditingAddr + 1;
             DataEditingTakeFocus = true;
-        } else if (data_editing_addr_next != (size_t) - 1) {
+        } else if (data_editing_addr_next != (size_t) -1) {
             DataEditingAddr = DataPreviewAddr = data_editing_addr_next;
             DataEditingTakeFocus = true;
         }
@@ -523,11 +462,11 @@ struct MemoryEditor
             size_t goto_addr;
             if (sscanf(AddrInputBuf, "%" _PRISizeT "X", &goto_addr) == 1) {
                 GotoAddr = goto_addr - base_display_addr;
-                HighlightMin = HighlightMax = (size_t) - 1;
+                HighlightMin = HighlightMax = (size_t) -1;
             }
         }
 
-        if (GotoAddr != (size_t) - 1) {
+        if (GotoAddr != (size_t) -1) {
             if (GotoAddr < mem_size) {
                 ImGui::BeginChild("##scrolling");
                 ImGui::SetScrollFromPosY(ImGui::GetCursorStartPos().y + (GotoAddr / Cols) * ImGui::GetTextLineHeight());
@@ -535,7 +474,7 @@ struct MemoryEditor
                 DataEditingAddr = DataPreviewAddr = GotoAddr;
                 DataEditingTakeFocus = true;
             }
-            GotoAddr = (size_t) - 1;
+            GotoAddr = (size_t) -1;
         }
     }
 
@@ -562,7 +501,7 @@ struct MemoryEditor
 
         char buf[128] = "";
         float x = s.GlyphWidth * 6.0f;
-        bool has_value = DataPreviewAddr != (size_t) - 1;
+        bool has_value = DataPreviewAddr != (size_t) -1;
         if (has_value) {
             DrawPreviewData(DataPreviewAddr, mem_data, mem_size, PreviewDataType, DataFormat_Dec, buf,
                             (size_t) IM_ARRAYSIZE(buf));

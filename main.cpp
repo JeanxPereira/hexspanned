@@ -15,10 +15,11 @@ MemoryEditor memEdit;
 ImGui::FileBrowser fileDialog;
 std::vector<uint8_t> data;
 unsigned vao, vbo;
-int vertex_buffer_start;
-int vertex_count;
-int vertex_stride;
 glm::mat4 projection, view, model;
+
+int vertex_buffer_start = 0;
+int vertex_count = 3;
+int vertex_stride = 12;
 bool bigEndian = true;
 bool wireframe = false;
 bool backfaceCulling = false;
@@ -121,6 +122,9 @@ int main()
 
         ImGui::Begin("Vertex Visualization");
         ImGui::InputInt("Start", &vertex_buffer_start, 1, 100, ImGuiInputTextFlags_CharsHexadecimal);
+        if (ImGui::Button("Set to Highlighted Address")) {
+            vertex_buffer_start = memEdit.DataEditingAddr;
+        }
         ImGui::InputInt("Count", &vertex_count, 1, 100, 0);
         ImGui::InputInt("Stride", &vertex_stride, 1, 100, 0);
         if (ImGui::Checkbox("Big-Endian", &bigEndian)) {
@@ -143,6 +147,7 @@ int main()
         ImGui::End();
 
         memEdit.DrawWindow("Hex View", data.data(), data.size());
+
         fileDialog.Display();
 
         if (fileDialog.HasSelected()) {
@@ -169,14 +174,20 @@ int main()
         glUseProgram(program);
 
 
-        projection = glm::perspective(glm::radians(45.0f), 1280.0f / 720.0f, 0.1f, 100.0f);
+        projection = glm::perspective(glm::radians(45.0f), 1280.0f / 720.0f, 0.1f, 1000.0f);
         view = glm::lookAt(glm::vec3(1, 1, 1) * viewDistance, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
         model = glm::identity<glm::mat4>();
         glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
         glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(glGetUniformLocation(program, "model"), 1, GL_FALSE, glm::value_ptr(model));
 
-        glDrawArrays(GL_TRIANGLES, 0, vertex_count);
+        if (vertex_stride * vertex_count + vertex_buffer_start < data.size()) {
+            glDrawArrays(GL_TRIANGLES, 0, vertex_count);
+        } else {
+            ImGui::Begin("Oops!", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+            ImGui::Text("The current render parameters would read past the end of the file!");
+            ImGui::End();
+        }
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
