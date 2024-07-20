@@ -320,6 +320,7 @@ int main()
             auto absPath = std::filesystem::absolute(fileDialog.GetSelected()).string();
             if (std::find(prevFiles.begin(), prevFiles.end(), absPath) == prevFiles.end()) {
                 prevFiles.push_back(absPath);
+                if (prevFiles.size() > 10) prevFiles.erase(0);
                 std::ofstream out(".hexspanned-history.json");
                 if (out.is_open()) {
                     out << prevFiles;
