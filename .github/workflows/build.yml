@@ -41,3 +41,10 @@ jobs:
     - name: Run tests (if applicable)
       run: ctest --output-on-failure
       working-directory: build
+
+    # Step to upload the compiled artifact
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: hexspanned-executable
+        path: build/hexspanned
