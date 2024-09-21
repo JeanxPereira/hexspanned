@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 add_executable(hexspanned main.cpp
         imfilebrowser.h)
 
-find_package(GLFW3 CONFIG REQUIRED)
+find_package(glfw3 CONFIG REQUIRED)
 target_link_libraries(hexspanned PRIVATE glfw)
 
 find_package(glad CONFIG REQUIRED)
