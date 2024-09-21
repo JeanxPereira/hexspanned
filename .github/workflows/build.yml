@@ -68,7 +68,7 @@ jobs:
         .\vcpkg\vcpkg integrate install
   
     - name: Configure CMake
-      run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake  # Updated command
+      run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake  # Corrected command
   
     - name: Build project
       run: cmake --build build
