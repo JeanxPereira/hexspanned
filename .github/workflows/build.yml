@@ -9,7 +9,8 @@ on:
       - main
 
 jobs:
-  build:
+  # Linux build job
+  build-linux:
     runs-on: ubuntu-latest
 
     steps:
@@ -42,9 +43,39 @@ jobs:
       run: ctest --output-on-failure
       working-directory: build
 
-    # Step to upload the compiled artifact
-    - name: Upload build artifacts
+    - name: Upload Linux build artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: hexspanned-executable
-        path: build/hexspanned
+        name: hexspanned-linux
+        path: build/hexspanned  # Adjust to your executable path if different
+
+  # Windows build job
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install vcpkg
+      run: |
+        git clone https://github.com/microsoft/vcpkg.git
+        .\vcpkg\bootstrap-vcpkg.bat
+      id: vcpkg
+
+    - name: Install dependencies via vcpkg
+      run: |
+        .\vcpkg\vcpkg install --triplet x64-windows
+        .\vcpkg\vcpkg integrate install
+
+    - name: Configure CMake
+      run: cmake -Bbuild -DCMAKE_TOOLCHAIN_FILE=.\vcpkg\scripts\buildsystems\vcpkg.cmake
+
+    - name: Build project
+      run: cmake --build build
+
+    - name: Upload Windows build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: hexspanned-windows
+        path: build\Release\hexspanned.exe  # Path to your .exe file (adjust if necessary)
