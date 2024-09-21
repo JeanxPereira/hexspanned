@@ -297,7 +297,7 @@ int main()
                     auto path = std::filesystem::path(recentFile.get<std::string>());
                     auto str_name = path.filename().string() + " (" + path.string() + ")";
                     if (ImGui::MenuItem(str_name.c_str())) {
-                        loadFile(path, data, vbo, visParams);
+                        loadFile(path.string(), data, vbo, visParams);
                     }
                 }
                 ImGui::EndMenu();
@@ -315,7 +315,7 @@ int main()
         fileDialog.Display();
 
         if (fileDialog.HasSelected()) {
-            loadFile(fileDialog.GetSelected(), data, vbo, visParams);
+            loadFile(fileDialog.GetSelected().string(), data, vbo, visParams);
 
             auto absPath = std::filesystem::absolute(fileDialog.GetSelected()).string();
             if (std::find(prevFiles.begin(), prevFiles.end(), absPath) == prevFiles.end()) {
