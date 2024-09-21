@@ -9,46 +9,6 @@ on:
       - main
 
 jobs:
-  # Linux build job
-  build-linux:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-
-    - name: Install required system libraries
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libxinerama-dev libxcursor-dev xorg-dev libglu1-mesa-dev pkg-config
-
-    - name: Install vcpkg
-      run: |
-        git clone https://github.com/microsoft/vcpkg.git
-        ./vcpkg/bootstrap-vcpkg.sh
-      id: vcpkg
-
-    - name: Install dependencies via vcpkg
-      run: |
-        ./vcpkg/vcpkg install --triplet x64-linux
-        ./vcpkg/vcpkg integrate install
-
-    - name: Configure CMake
-      run: cmake -Bbuild -DCMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake
-
-    - name: Build project
-      run: cmake --build build
-
-    - name: Run tests (if applicable)
-      run: ctest --output-on-failure
-      working-directory: build
-
-    - name: Upload Linux build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: hexspanned-linux
-        path: build/hexspanned  # Ajuste para o caminho correto do executável
-
   # Windows build job
   build-windows:
     runs-on: windows-latest
@@ -73,11 +33,19 @@ jobs:
     - name: Build project
       run: cmake --build build --config Release
 
+    # Novo passo para copiar a glfw3.dll para o diretório Release
+    - name: Copy glfw3.dll to Release
+      run: |
+        copy .\vcpkg_installed\x64-windows\bin\glfw3.dll build\Release\
+
     - name: List build directory
       run: dir build\Release
   
+    # Atualizando o upload para incluir tanto o executável quanto a glfw3.dll
     - name: Upload Windows build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: hexspanned-windows
-        path: build\Release\hexspanned.exe  # Certifique-se de que o executável está neste diretório
+        path: |
+          build\Release\hexspanned.exe
+          build\Release\glfw3.dll  # Incluindo a glfw3.dll no artefato
