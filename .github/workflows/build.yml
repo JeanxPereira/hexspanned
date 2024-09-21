@@ -17,31 +17,45 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
   
+    # Novo passo para restaurar o cache do vcpkg
+    - name: Cache vcpkg
+      uses: actions/cache@v3
+      with:
+        path: vcpkg_installed
+        key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
+        restore-keys: |
+          ${{ runner.os }}-vcpkg-
+
+    # Instalar o vcpkg (caso o cache não seja encontrado)
     - name: Install vcpkg
       run: |
-        git clone https://github.com/microsoft/vcpkg.git
+        if not exist vcpkg\vcpkg.exe git clone https://github.com/microsoft/vcpkg.git
         .\vcpkg\bootstrap-vcpkg.bat
   
+    # Instalar as dependências via vcpkg (somente se necessário)
     - name: Install dependencies via vcpkg
       run: |
         .\vcpkg\vcpkg install --triplet x64-windows
         .\vcpkg\vcpkg integrate install
   
+    # Configurar CMake
     - name: Configure CMake
       run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
   
+    # Compilar o projeto
     - name: Build project
       run: cmake --build build --config Release
 
-    # Novo passo para copiar a glfw3.dll para o diretório Release
+    # Novo passo para copiar glfw3.dll para o diretório Release
     - name: Copy glfw3.dll to Release
       run: |
         copy .\vcpkg_installed\x64-windows\bin\glfw3.dll build\Release\
 
+    # Listar o diretório de build
     - name: List build directory
       run: dir build\Release
   
-    # Atualizando o upload para incluir tanto o executável quanto a glfw3.dll
+    # Upload dos artefatos do build
     - name: Upload Windows build artifacts
       uses: actions/upload-artifact@v4
       with:
