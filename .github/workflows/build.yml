@@ -44,10 +44,10 @@ jobs:
       working-directory: build
 
     - name: Upload Linux build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: hexspanned-linux
-        path: build/hexspanned  # Adjust to your executable path if different
+        path: build/hexspanned  # Ajuste para o caminho correto do executável
 
   # Windows build job
   build-windows:
@@ -68,14 +68,16 @@ jobs:
         .\vcpkg\vcpkg integrate install
   
     - name: Configure CMake
-      run: |
-        cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake
+      run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
   
     - name: Build project
       run: cmake --build build
+
+    - name: List build directory
+      run: dir build\Release
   
     - name: Upload Windows build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: hexspanned-windows
-        path: build\Release\hexspanned.exe  # Adjust if necessary
+        path: build\Release\hexspanned.exe  # Verifique o caminho correto
