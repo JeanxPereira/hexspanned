@@ -12,15 +12,6 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <nlohmann/json.hpp>
 
-ImGui::CreateContext();
-ImGuiIO& io = ImGui::GetIO();
-
-// Aumentar a escala de todos os elementos da UI
-ImGui::GetStyle().ScaleAllSizes(1.5f);  // 1.5 é o fator de escala (pode ser ajustado)
-ImGui_ImplGlfw_InitForOpenGL(window, true);
-ImGui_ImplOpenGL3_Init("#version 330 core");
-
-
 using json = nlohmann::json;
 
 enum PolygonMode
@@ -238,6 +229,10 @@ int main()
     gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
 
     ImGui::CreateContext();
+
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::GetStyle().ScaleAllSizes(1.5f);
+    
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
