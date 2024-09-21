@@ -29,9 +29,12 @@ jobs:
     # Instalar o vcpkg (caso o cache não seja encontrado)
     - name: Install vcpkg
       run: |
-        if not exist vcpkg\vcpkg.exe git clone https://github.com/microsoft/vcpkg.git
+        if (-Not (Test-Path "vcpkg\vcpkg.exe")) {
+          git clone https://github.com/microsoft/vcpkg.git
+        }
         .\vcpkg\bootstrap-vcpkg.bat
-  
+      shell: pwsh
+
     # Instalar as dependências via vcpkg (somente se necessário)
     - name: Install dependencies via vcpkg
       run: |
